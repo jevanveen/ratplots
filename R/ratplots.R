@@ -1,0 +1,318 @@
+#Need
+#check all existing functions
+#fix indexing by number
+#standardize names between functions
+
+#' rename numeric seurat object clusters with output of top_markers
+#'
+#' @param object a seurat object
+#' @param marker.list optional: a list of markers for clusters. If not supplied,
+#' will be calculated by FindAllMarkers() with default settings
+#' @return a seurat object with clusters named for top markers
+#' @export
+rename_clusters <- function(object, marker.list = NULL){
+  tryCatch({
+    if(is.null(marker.list)){
+      marker.list <- FindAllMarkers(object = object, only.pos = T)
+    }
+    new.cluster.ids <- top_markers(marker.list)$genesig
+    names(new.cluster.ids) <- levels(object)
+    object <- RenameIdents(object, new.cluster.ids)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+#' return the top n markers from a list of markers as generate by FindAllMarkers()
+#'
+#' @param object a seurat object
+#' @param marker.list optional: a list of markers for clusters. If not supplied,
+#' will be calculated by FindAllMarkers() with default settings
+#' @return a seurat object with clusters named for top markers
+#' @export
+top_markers <- function(marker.list, n_markers = 1, adj_p_cutoff = .05){
+  tryCatch({
+    marker.list <- marker.list %>%
+      filter(avg_logFC > 0) %>%
+      mutate(sig = ifelse(p_val_adj < adj_p_cutoff, "", "(NS)")) %>%
+      mutate(genesig = paste0(gene, sig))
+    nclusters <- nlevels(marker.list$cluster)
+    tops <- tibble()
+    for(i in 1:nclusters){
+      temp <- filter(marker.list, cluster == i-1) %>%
+        arrange(desc(avg_logFC), desc(sig))
+      tops <- bind_rows(tops, head(temp, n_markers))
+    }
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  return(tops)
+}
+Volcano_Plot_GS <- function(degfile, label_features, gene_column = "geneid", logfc_column = "log2fc",
+                            pvalue_column = "pvalue", padj_column = "padj",
+                            label_padj = .05, point_alpha = 1, base_color = "gray", sig_color = "black",
+                            gs_color = "purple", gs_size = 2){
+  tryCatch({
+    label_features <- label_features %>% tolower() %>% Hmisc::capitalize()
+    missing.features <- label_features[!(label_features %in% degfile[[gene_column]])]
+    label.data <- filter(degfile, degfile[[gene_column]] %in% label_features)
+    sig.data <- filter(degfile, degfile[[padj_column]] < label_padj)
+    p1 <- ggplot(data = degfile, aes(x = degfile[[logfc_column]], y = -log10(degfile[[pvalue_column]]))) +
+      geom_point(alpha = point_alpha, color = base_color) +
+      geom_point(alpha = point_alpha, data = sig.data, color = sig_color, aes(x = sig.data[[logfc_column]], y = -log10(sig.data[[pvalue_column]]))) +
+      theme_classic() +
+      geom_point(size = gs_size, color = gs_color, data = label.data, aes(x = label.data[[logfc_column]], y = -log10(label.data[[pvalue_column]]))) +
+      ggrepel::geom_text_repel(segment.alpha = .5, color = "#FF40FE", data = label.data, aes(x = label.data[[logfc_column]], y = -log10(label.data[[pvalue_column]]), label = label.data[[gene_column]])) +
+      xlab("LogFC") +
+      ylab("-Log10(p value)")
+    if(length(missing.features) > 0){
+      warning(paste0("missing feature: ",  missing.features, " "))
+    }
+    return(p1)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+Volcano_Plot <- function(degfile, gene_column = "geneid", logfc_column = "log2fc",
+                         pvalue_column = "pvalue", padj_column = "padj", color_by = "cutoffs",
+                         cutoff_log2fc = 0, cutoff_padj = .05, point_alpha = 1){
+  tryCatch({
+    if(color_by == "cutoffs"){
+      label.data <- filter(degfile, abs(degfile[[logfc_column]]) > cutoff_log2fc & degfile[[padj_column]] < cutoff_padj)
+      p1 <- ggplot(data = degfile, aes(x = degfile[[logfc_column]], y = -log10(degfile[[pvalue_column]]))) +
+        geom_point(alpha = point_alpha, color = "gray") +
+        geom_point(alpha = point_alpha, data = label.data, color = "black", aes(x = label.data[[logfc_column]], y = -log10(label.data[[pvalue_column]]))) +
+        geom_text_repel(data = label.data, color = "black", label = label.data[[gene_column]], aes(x = label.data[[logfc_column]], y = -log10(label.data[[pvalue_column]]))) +
+        theme_classic() +
+        xlab("LogFC") +
+        ylab("-Log10(p value)")
+    }else{
+      p1 <- ggplot(data = degfile, aes(x = degfile[[logfc_column]], y = -log10(degfile[[pvalue_column]]), color = degfile[[color_by]])) +
+        geom_point(alpha = point_alpha) +
+        scale_color_gradient(name = color_by, trans = "log") +
+        theme_classic() +
+        xlab("LogFC") +
+        ylab("-Log10(p value)")
+    }
+    return(p1)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+#is works? basic yes but not pathway filtering yet. maybe color pathways?
+Cluster_GSEA_pvals <- function(GSEA_output, pathway = NULL){
+  tryCatch({
+    if(is.null(pathway)){
+      bind <- bind_rows(GSEA_output)
+      bind$cluster <- as.factor(bind$cluster)
+      sig.values <- filter(bind, p.adj.adj <= .05)
+      p1 <-  ggplot(data = bind, aes(x = reorder(bind$cluster, bind$padj), y = -log(pval))) +
+        geom_point(color = "gray") +
+        geom_point(data = sig.values, aes(x = reorder(sig.values$cluster, sig.values$padj), y = -log(pval)), color = "black") +
+        theme_classic() +
+        xlab("Cluster")
+    }
+    else{
+      bind <- GSEA_output %>%
+        bind_rows() %>%
+        filter(pathway == pathway)
+      bind$cluster <- as.factor(bind$cluster)
+      sig.values <- filter(bind, p.adj.adj <= .05)
+      p1 <-  ggplot(data = bind, aes(x = reorder(bind$cluster, bind$padj), y = -log(pval))) +
+        geom_point(color = "gray") +
+        geom_point(data = sig.values, aes(x = reorder(sig.values$cluster, sig.values$padj), y = -log(pval)), color = "black") +
+        theme_classic() +
+        xlab("Cluster")
+    }
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  return(p1)
+}
+
+#could probably fix indexing issue by either using lapply, or figuring how to loop by names. seq_along? Map?
+Cluster_DEGs <- function(object, condition.1, condition.2, logfc.threshold = .1, min.pct = .05, test.use = "wilcox", logFCcollapse = 100){
+  tryCatch({
+    num.clusters <- nlevels(object@active.ident)
+    Idents(object) <- paste0(object@active.ident, "_", object@meta.data$cond)
+    temp <- list()
+    for(i in 1:num.clusters){
+      tryCatch({
+        x <- paste0(i-1, "_", condition.1)
+        y <- paste0(i-1, "_", condition.2)
+        temp[[i]] <- FindMarkers(object, ident.1 = x, ident.2 = y, logfc.threshold = logfc.threshold, min.pct = min.pct, test.use = test.use)
+        temp[[i]] <- rownames_to_column(temp[[i]], var = "gene")
+        temp[[i]]$avg_logFC[temp[[i]]$avg_logFC < -logFCcollapse] <- -logFCcollapse
+        temp[[i]]$avg_logFC[temp[[i]]$avg_logFC > logFCcollapse] <- logFCcollapse
+        temp[[i]][,"Cluster"] <- (i-1)
+      }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    }
+    return(temp)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+Cluster_Marker_Violins <- function(object, marker.list, label.size = 1){
+  tryCatch({
+    num.clusters <- nlevels(object@active.ident)
+    plotlist <- vector()
+    for(i in 1:num.clusters){
+      tryCatch({
+        assign(paste0("n", i), VlnPlot(object = object, features = c(top_n(filter(marker.list, cluster == i-1), 1, avg_logFC)$gene),
+                                       ncol = 1, pt.size = 0) + NoAxes() + NoLegend() + theme(plot.title = element_text(face = "bold.italic", size = label.size)))
+        plotlist <- append(plotlist, paste0("n", i))
+      }, error=function(e){
+        cat("ERROR :",conditionMessage(e), "Cluster", i, "\n")
+        plotlist <- plotlist[-i]})
+    }
+    p1 <- plot_grid(plotlist = mget(plotlist), ncol = 1)
+    return(p1)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+#this will likely work when you figure out how to give plot_grid a char vector
+#for this i should add a statement where idents are converted back to 0:whatever in case i or someone renames clusters
+Cluster_sig_DEGs <- function(Cluster_DEG_list, padj = .05){
+
+  num.clusters <- length(Cluster_DEG_list)
+  temp.sig <- list()
+  for(i in 1:num.clusters){
+    tryCatch({
+      temp <- as.data.frame(Cluster_DEG_list[[i]])
+      temp <- rownames_to_column(temp)
+      temp <- temp %>% filter(p_val_adj < padj)
+      temp.sig[[i]] <- temp
+    }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  }
+  temp <- bind_rows(temp.sig)
+  return(temp)
+
+}
+DEGs_UpDown_Plot <- function(Cluster_DEG_list, padj = .05, color.up = "#FFB81C", color.down = "#2774AE"){
+  num.clusters <- length(Cluster_DEG_list)
+  temp.sig <- list()
+  for(i in 1:num.clusters){
+    tryCatch({
+      temp <- as.data.frame(Cluster_DEG_list[[i]])
+      temp <- rownames_to_column(temp)
+      temp <- temp %>% filter(p_val_adj < padj)
+      temp.sig[[i]] <- temp
+    }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  }
+
+
+  updown <- data.frame("Cluster" = numeric(), "Up" = numeric(), "Down" = numeric())
+  for(i in 1:num.clusters){
+    updown[i, "Cluster"] <- i-1
+    updown[i, "Up"] <- sum(temp.sig[[i]]$avg_logFC > 0)
+    updown[i, "Down"] <- sum(temp.sig[[i]]$avg_logFC < 0)
+  }
+
+  updown <- gather(updown, key = "key", value = "value", Up:Down)
+  updown$Cluster <- as.factor(updown$Cluster)
+
+  p1 <- ggplot() +
+    geom_col(data = subset(updown, key == "Up"), aes(x = Cluster, y = value), fill = color.up) +
+    geom_col(data = subset(updown, key == "Down"), aes(x = Cluster, y = -value), fill = color.down) +
+    geom_hline(yintercept = 0, color = "darkgrey", linetype = "dashed") +
+    labs(y = "Up/Down regulated, adjp < .05", x = NULL, fill = NULL) +
+    theme_classic()
+
+  return(p1)
+}
+
+BellagioPlot <- function(Cluster_DEG_list, logFCcollapse = 10, padj.cutoff = .05, pt.size = 1){
+  tryCatch({
+    collapse <- bind_rows(Cluster_DEG_list)
+    collapse$avg_logFC[collapse$avg_logFC < -logFCcollapse] <- -logFCcollapse
+    collapse$avg_logFC[collapse$avg_logFC > logFCcollapse] <- logFCcollapse
+    collapse$Cluster <- as.factor(collapse$Cluster)
+
+    p1 <- ggplot() +
+      geom_point(data = subset(collapse, p_val_adj > padj.cutoff), size = pt.size, aes(x = Cluster, y = avg_logFC, color = "> .05"), position = "jitter") +
+      geom_point(data = subset(collapse, p_val_adj <= padj.cutoff), size = pt.size, aes(x = Cluster, y = avg_logFC, color = "<= .05"), position = "jitter") +
+      scale_color_manual(name = "adjusted p val", values = c("black", "grey")) +
+      theme_classic()
+
+    return(p1)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+BellagioGeneSet <- function(Cluster_DEG_list, logFCcollapse = 10, features, clusters = NULL, label.size = 2.5, label.alpha = .6){
+  tryCatch({
+    features <- capitalize(tolower(features))
+    collapse <- bind_rows(Cluster_DEG_list)
+    collapse$avg_logFC[collapse$avg_logFC < -logFCcollapse] <- -logFCcollapse
+    collapse$avg_logFC[collapse$avg_logFC > logFCcollapse] <- logFCcollapse
+    if(!is.null(clusters)){
+      collapse <- filter(collapse, Cluster %in% clusters)
+    }
+    collapse$Cluster <- as.factor(collapse$Cluster)
+    ncolor <- length(unique(collapse$gene[collapse$gene %in% capitalize(tolower(features))]))
+    mycolors <- colorRampPalette(brewer.pal(8, "Spectral"))(ncolor)
+    data.sub <- subset(collapse, gene %in% features)
+    p1 <- ggplot() +
+      geom_point(data = collapse, aes(x = Cluster, y = avg_logFC), position = "jitter", color = "gray") +
+      geom_point(data = data.sub, aes(x = Cluster, y = avg_logFC, color = gene), position = position_jitter(seed = 1)) +
+      scale_color_manual(values = mycolors) +
+      theme_classic() +
+      geom_text(data = data.sub, size = label.size, alpha = label.alpha, aes(x = Cluster, y = avg_logFC, label = gene), position = position_jitter(seed = 1))
+    return(p1)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+Cluster_GSEA <- function(Cluster_DEG_list, geneset, sig.snapshot = F, minSize = 10, maxSize = 500, nperm = 10000, nproc = 2){
+  tryCatch({
+    temp <- list()
+    temp.sig <- tibble("pathway" = character(), "pval" = numeric(), "padj" = numeric(), "cluster" = numeric())
+    nclusters <- length(Cluster_DEG_list)
+    geneset <- lapply(geneset, toupper)
+    for(i in 1:nclusters){
+      tryCatch({
+        rnkfile <- data.frame(cbind(Cluster_DEG_list[[i]]$gene, Cluster_DEG_list[[i]]$avg_logFC), stringsAsFactors = F)
+        colnames(rnkfile) <- c("ID", "t")
+        rnkfile$t <- as.numeric(rnkfile$t)
+        rnkfile <- rnkfile[complete.cases(rnkfile),]
+        rnkfile[,1] = toupper(rnkfile[,1])
+        rnkfile <- setNames(rnkfile$t, rnkfile$ID)
+        temp[[i]] <- fgsea(geneset, rnkfile, minSize = 10, maxSize = 500, nperm = 10000, nproc = nproc)
+        temp[[i]] <- temp[[i]][order(padj)]
+        temp[[i]] <- temp[[i]][,1:6]
+        temp[[i]][,"cluster"] <- i-1
+        temp[[i]][,"p.adj.adj"] <- p.adjust(temp[[i]]$pval, method = "BH", n = (nclusters * length(geneset)))
+        temp.sig <- bind_rows(temp.sig, filter(temp[[i]], padj < .05))
+        rm(rnkfile)
+      }, error=function(e){cat("ERROR :",conditionMessage(e), "\n", "No DEGs for cluster", i-1, "?", "\n")})
+    }
+
+    if(sig.snapshot == F) {return(temp)} else {return(temp.sig)}
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+GSEA_Mountain <- function(Cluster_DEG_list, cluster, geneset, gseaParam = 1, ticksSize = .2){
+  tryCatch({
+    rnkfile <- data.frame(cbind(Cluster_DEG_list[[cluster+1]]$gene, Cluster_DEG_list[[cluster+1]]$avg_logFC), stringsAsFactors = F)
+    colnames(rnkfile) <- c("ID", "t")
+    rnkfile$t <- as.numeric(rnkfile$t)
+    rnkfile <- rnkfile[complete.cases(rnkfile),]
+    rnkfile[,1] = toupper(rnkfile[,1])
+    rnkfile <- setNames(rnkfile$t, rnkfile$ID)
+    p1 <- plotEnrichment(pathway = geneset, stats = rnkfile, gseaParam = gseaParam, ticksSize = ticksSize)
+    return(p1)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
+#this needs to be fixed because apparently you cant have two calls to geom_text. could probably rbind label.data 1 and 2, then color by defining column
+Volcano_Plot_GS_notworks <- function(degfile, label_features.1, label_features.2 = NULL, gene_column = "geneid", logfc_column = "log2fc",
+                                     pvalue_column = "pvalue", padj_column = "padj",
+                                     label_padj = .05, point_alpha = 1){
+  label.data.1 <- filter(degfile, degfile[[gene_column]] %in% label_features.1)
+  sig.data <- filter(degfile, degfile[[padj_column]] < label_padj)
+  if(is.null(label_features.2)){
+    p1 <- ggplot(data = degfile, aes(x = degfile[[logfc_column]], y = -log10(degfile[[pvalue_column]]))) +
+      geom_point(alpha = point_alpha, color = "#2774AE") +
+      geom_point(alpha = point_alpha, data = sig.data, color = "#FFD100", aes(x = sig.data[[logfc_column]], y = -log10(sig.data[[pvalue_column]]))) +
+      theme_classic() +
+      geom_point(color = "purple", data = label.data.1, aes(x = label.data.1[[logfc_column]], y = -log10(label.data.1[[pvalue_column]]))) +
+      geom_text(nudge_y = .25, data = label.data.1, aes(x = label.data.1[[logfc_column]], y = -log10(label.data.1[[pvalue_column]]), label = label.data.1[[gene_column]]))
+  } else {
+    label.data.2 <- filter(degfile, degfile[[gene_column]] %in% label_features.2)
+    p1 <- ggplot(data = degfile, aes(x = degfile[[logfc_column]], y = -log10(degfile[[pvalue_column]]))) +
+      geom_point(alpha = point_alpha, color = "#2774AE") +
+      geom_point(alpha = point_alpha, data = sig.data, color = "#FFD100", aes(x = sig.data[[logfc_column]], y = -log10(sig.data[[pvalue_column]]))) +
+      theme_classic() +
+      geom_point(color = "purple", data = label.data.1, aes(x = label.data.1[[logfc_column]], y = -log10(label.data.1[[pvalue_column]]))) +
+      geom_point(color = "darkgreen", data = label.data.2, aes(x = label.data.2[[logfc_column]], y = -log10(label.data.2[[pvalue_column]]))) +
+      geom_text(color = "purple", nudge_y = .25, data = label.data.1, aes(x = label.data.1[[logfc_column]], y = -log10(label.data.1[[pvalue_column]]), label = label.data.1[[gene_column]]))
+    geom_text(color = "darkgreen", nudge_y = .25, data = label.data.2, aes(x = label.data.2[[logfc_column]], y = -log10(label.data.2[[pvalue_column]]), label = label.data.2[[gene_column]]))
+  }
+  return(p1)
+}
