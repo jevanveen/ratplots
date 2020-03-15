@@ -32,7 +32,9 @@ top_markers <- function(marker.list, n_markers = 1, adj_p_cutoff = .05){
     marker.list <- marker.list %>%
       filter(avg_logFC > 0) %>%
       mutate(sig = ifelse(p_val_adj < adj_p_cutoff, "", "(NS)")) %>%
-      mutate(genesig = paste0(gene, sig))
+      rownames_to_column(var = "gene_num") %>%
+      mutate(genesig = paste0(gene_num, sig)) %>%
+      column_to_rownames(var = "gene_num")
     nclusters <- nlevels(marker.list$cluster)
     tops <- tibble()
     for(i in 1:nclusters){
@@ -41,8 +43,56 @@ top_markers <- function(marker.list, n_markers = 1, adj_p_cutoff = .05){
       tops <- bind_rows(tops, head(temp, n_markers))
     }
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  tops <- select(tops, -sig)
   return(tops)
 }
+#could probably fix indexing issue by either using lapply, or figuring how to loop by names. seq_along? Map?
+#' rename numeric seurat object clusters with output of top_markers
+#'
+#' @param object a seurat object
+#' @param marker.list optional: a list of markers for clusters. If not supplied,
+#' will be calculated by FindAllMarkers() with default settings
+#' @return a seurat object with clusters named for top markers
+#' @export
+cluster_DEGs <- function(object, condition_1, condition_2, meta_slot = "orig.ident", logfc.threshold = .1, min.pct = .05, test.use = "wilcox", logFCcollapse = 100){
+  tryCatch({
+    levs <- levels(object@active.ident)
+    Idents(object) <- paste0(object@active.ident, "_", object@meta.data[[meta_slot]])
+    temp <- list()
+    for(i in levs){
+      tryCatch({
+        x <- paste0(i, "_", condition_1)
+        y <- paste0(i, "_", condition_2)
+        temp[[i]] <- FindMarkers(object, ident.1 = x, ident.2 = y, logfc.threshold = logfc.threshold, min.pct = min.pct, test.use = test.use)
+        temp[[i]] <- rownames_to_column(temp[[i]], var = "gene")
+        temp[[i]]$avg_logFC[temp[[i]]$avg_logFC < -logFCcollapse] <- -logFCcollapse
+        temp[[i]]$avg_logFC[temp[[i]]$avg_logFC > logFCcollapse] <- logFCcollapse
+        temp[[i]][,"Cluster"] <- (i-1)
+      }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    }
+    return(temp)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+Cluster_DEGs <- function(object, condition.1, condition.2, logfc.threshold = .1, min.pct = .05, test.use = "wilcox", logFCcollapse = 100){
+  tryCatch({
+    num.clusters <- nlevels(object@active.ident)
+    Idents(object) <- paste0(object@active.ident, "_", object@meta.data$cond)
+    temp <- list()
+    for(i in 1:num.clusters){
+      tryCatch({
+        x <- paste0(i-1, "_", condition.1)
+        y <- paste0(i-1, "_", condition.2)
+        temp[[i]] <- FindMarkers(object, ident.1 = x, ident.2 = y, logfc.threshold = logfc.threshold, min.pct = min.pct, test.use = test.use)
+        temp[[i]] <- rownames_to_column(temp[[i]], var = "gene")
+        temp[[i]]$avg_logFC[temp[[i]]$avg_logFC < -logFCcollapse] <- -logFCcollapse
+        temp[[i]]$avg_logFC[temp[[i]]$avg_logFC > logFCcollapse] <- logFCcollapse
+        temp[[i]][,"Cluster"] <- (i-1)
+      }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    }
+    return(temp)
+  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+}
+
 Volcano_Plot_GS <- function(degfile, label_features, gene_column = "geneid", logfc_column = "log2fc",
                             pvalue_column = "pvalue", padj_column = "padj",
                             label_padj = .05, point_alpha = 1, base_color = "gray", sig_color = "black",
@@ -121,26 +171,7 @@ Cluster_GSEA_pvals <- function(GSEA_output, pathway = NULL){
   return(p1)
 }
 
-#could probably fix indexing issue by either using lapply, or figuring how to loop by names. seq_along? Map?
-Cluster_DEGs <- function(object, condition.1, condition.2, logfc.threshold = .1, min.pct = .05, test.use = "wilcox", logFCcollapse = 100){
-  tryCatch({
-    num.clusters <- nlevels(object@active.ident)
-    Idents(object) <- paste0(object@active.ident, "_", object@meta.data$cond)
-    temp <- list()
-    for(i in 1:num.clusters){
-      tryCatch({
-        x <- paste0(i-1, "_", condition.1)
-        y <- paste0(i-1, "_", condition.2)
-        temp[[i]] <- FindMarkers(object, ident.1 = x, ident.2 = y, logfc.threshold = logfc.threshold, min.pct = min.pct, test.use = test.use)
-        temp[[i]] <- rownames_to_column(temp[[i]], var = "gene")
-        temp[[i]]$avg_logFC[temp[[i]]$avg_logFC < -logFCcollapse] <- -logFCcollapse
-        temp[[i]]$avg_logFC[temp[[i]]$avg_logFC > logFCcollapse] <- logFCcollapse
-        temp[[i]][,"Cluster"] <- (i-1)
-      }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
-    }
-    return(temp)
-  }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
-}
+
 Cluster_Marker_Violins <- function(object, marker.list, label.size = 1){
   tryCatch({
     num.clusters <- nlevels(object@active.ident)

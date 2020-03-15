@@ -118,10 +118,19 @@ table(lha.neurons.sub@meta.data$orig.ident)
 
 neuron.markers <- FindAllMarkers(lha.neurons.sub, only.pos = T)
 
-top_markers(neuron.markers)
-testing <- rename_clusters(lha.neurons.sub, marker.list = neuron.markers)
+make.unique(top_markers(neuron.markers)$gene)
 
-DimPlot(testing, reduction = "umap", label = TRUE) + NoLegend()
+lha.neurons.sub.2 <- rename_clusters(lha.neurons.sub, marker.list = neuron.markers)
+
+DimPlot(lha.neurons.sub, reduction = "umap", label = TRUE) + NoLegend()
+
+lha.neurons.sub@meta.data[orig.ident]
+levels(lha.neurons.sub@active.ident)
+
+lha.neurons.fvm <- cluster_DEGs(lha.neurons.sub, condition_1 = "femaleLHA", condition_2 = "maleLHA")
+
+levels(lha.neurons@active.ident)
+
 
 
 #sst clusters are 10, 17, 21
