@@ -134,7 +134,7 @@ Cluster_GSEA <- function(Cluster_DEG_list, geneset, sig.snapshot = F, minSize = 
         rnkfile[,1] = toupper(rnkfile[,1])
         rnkfile <- setNames(rnkfile$t, rnkfile$ID)
         temp[[i]] <- fgsea(geneset, rnkfile, minSize = 10, maxSize = 500, nperm = 10000, nproc = nproc)
-        temp[[i]] <- temp[[i]][order(padj)]
+        temp[[i]] <- temp[[i]][order(temp[[i]]$padj)]
         temp[[i]] <- temp[[i]][,1:6]
         temp[[i]][,"cluster"] <- i-1
         temp[[i]][,"p.adj.adj"] <- p.adjust(temp[[i]]$pval, method = "BH", n = (nclusters * length(geneset)))
