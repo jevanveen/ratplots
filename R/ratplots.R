@@ -122,7 +122,6 @@ BellagioGeneSet <- function(Cluster_DEG_list, logFCcollapse = 10, features, clus
 Cluster_GSEA <- function(Cluster_DEG_list, geneset, sig.snapshot = F, minSize = 10, maxSize = 500, nperm = 10000, nproc = 2){
   tryCatch({
     temp <- list()
-    temp.sig <- tibble()
     nclusters <- length(Cluster_DEG_list)
     geneset <- lapply(geneset, toupper)
     for(i in 1:nclusters){
@@ -133,14 +132,15 @@ Cluster_GSEA <- function(Cluster_DEG_list, geneset, sig.snapshot = F, minSize = 
         rnkfile <- rnkfile[complete.cases(rnkfile),]
         rnkfile[,1] = toupper(rnkfile[,1])
         rnkfile <- setNames(rnkfile$t, rnkfile$ID)
-        temp[[i]] <- fgsea(geneset, rnkfile, minSize = 10, maxSize = 500, nperm = 10000, nproc = nproc)
+        temp[[i]] <- fgsea(geneset, rnkfile, minSize = minSize, maxSize = maxSize, nperm = nperm, nproc = nproc)
         temp[[i]] <- temp[[i]][order(temp[[i]]$padj)]
         temp[[i]]$cluster <- Cluster_DEG_list[[i]]$cluster
         temp[[i]]$p.adj.adj <- p.adjust(temp[[i]]$pval, method = "BH", n = (nclusters * length(geneset)))
-        temp.sig <- bind_rows(temp.sig, filter(temp[[i]], padj < .05))
         rm(rnkfile)
       }, error=function(e){cat("ERROR :",conditionMessage(e), "\n", "No DEGs for cluster", i-1, "?", "\n")})
     }
+    temp.sig <- dplyr::bind_rows(temp)
+    temp.sig <- dplyr::filter(temp.sig, padj <= .05)
 
     if(sig.snapshot == F) {return(temp)} else {return(temp.sig)}
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
