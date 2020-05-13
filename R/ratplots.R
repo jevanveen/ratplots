@@ -133,8 +133,7 @@ Cluster_GSEA <- function(Cluster_DEG_list, geneset, sig.snapshot = F, minSize = 
         rnkfile[,1] = toupper(rnkfile[,1])
         rnkfile <- setNames(rnkfile$t, rnkfile$ID)
         temp[[i]] <- fgsea(geneset, rnkfile, minSize = minSize, maxSize = maxSize, nperm = nperm, nproc = nproc)
-        temp[[i]] <- temp[[i]][order(temp[[i]]$padj)]
-        temp[[i]]$cluster <- Cluster_DEG_list[[i]]$cluster
+        temp[[i]]$cluster <- Cluster_DEG_list[[i]]$cluster[1]
         temp[[i]]$p.adj.adj <- p.adjust(temp[[i]]$pval, method = "BH", n = (nclusters * length(geneset)))
         rm(rnkfile)
       }, error=function(e){cat("ERROR :",conditionMessage(e), "\n", "No DEGs for cluster", i-1, "?", "\n")})
