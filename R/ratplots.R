@@ -84,11 +84,11 @@ BellagioPlot <- function(Cluster_DEG_list, logFCcollapse = 10, padj.cutoff = .05
     collapse <- bind_rows(Cluster_DEG_list)
     collapse$avg_logFC[collapse$avg_logFC < -logFCcollapse] <- -logFCcollapse
     collapse$avg_logFC[collapse$avg_logFC > logFCcollapse] <- logFCcollapse
-    collapse$Cluster <- as.factor(collapse$Cluster)
+    collapse$cluster <- as.factor(collapse$cluster)
 
     p1 <- ggplot() +
-      geom_point(data = subset(collapse, p_val_adj > padj.cutoff), size = pt.size, aes(x = Cluster, y = avg_logFC, color = "> .05"), position = "jitter") +
-      geom_point(data = subset(collapse, p_val_adj <= padj.cutoff), size = pt.size, aes(x = Cluster, y = avg_logFC, color = "<= .05"), position = "jitter") +
+      geom_point(data = subset(collapse, p_val_adj > padj.cutoff), size = pt.size, aes(x = cluster, y = avg_logFC, color = "> .05"), position = "jitter") +
+      geom_point(data = subset(collapse, p_val_adj <= padj.cutoff), size = pt.size, aes(x = cluster, y = avg_logFC, color = "<= .05"), position = "jitter") +
       scale_color_manual(name = "adjusted p val", values = c("black", "grey")) +
       theme_classic()
 
