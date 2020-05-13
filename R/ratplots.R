@@ -71,7 +71,7 @@ cluster_DEGs <- function(object, condition_1, condition_2, meta_slot = "orig.ide
         temp[[i]] <- rownames_to_column(temp[[i]], var = "gene")
         temp[[i]]$avg_logFC[temp[[i]]$avg_logFC < -logFCcollapse] <- -logFCcollapse
         temp[[i]]$avg_logFC[temp[[i]]$avg_logFC > logFCcollapse] <- logFCcollapse
-        temp[[i]]$Cluster <- i
+        temp[[i]]$cluster <- i
       }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
     }
     return(temp)
@@ -122,7 +122,7 @@ BellagioGeneSet <- function(Cluster_DEG_list, logFCcollapse = 10, features, clus
 Cluster_GSEA <- function(Cluster_DEG_list, geneset, sig.snapshot = F, minSize = 10, maxSize = 500, nperm = 10000, nproc = 2){
   tryCatch({
     temp <- list()
-    temp.sig <- tibble("pathway" = character(), "pval" = numeric(), "padj" = numeric(), "cluster" = numeric())
+    temp.sig <- tibble()
     nclusters <- length(Cluster_DEG_list)
     geneset <- lapply(geneset, toupper)
     for(i in 1:nclusters){
@@ -135,9 +135,8 @@ Cluster_GSEA <- function(Cluster_DEG_list, geneset, sig.snapshot = F, minSize = 
         rnkfile <- setNames(rnkfile$t, rnkfile$ID)
         temp[[i]] <- fgsea(geneset, rnkfile, minSize = 10, maxSize = 500, nperm = 10000, nproc = nproc)
         temp[[i]] <- temp[[i]][order(temp[[i]]$padj)]
-        temp[[i]] <- temp[[i]][,1:6]
-        temp[[i]][,"cluster"] <- i-1
-        temp[[i]][,"p.adj.adj"] <- p.adjust(temp[[i]]$pval, method = "BH", n = (nclusters * length(geneset)))
+        temp[[i]]$cluster <- Cluster_DEG_list[[i]]$cluster
+        temp[[i]]$p.adj.adj <- p.adjust(temp[[i]]$pval, method = "BH", n = (nclusters * length(geneset)))
         temp.sig <- bind_rows(temp.sig, filter(temp[[i]], padj < .05))
         rm(rnkfile)
       }, error=function(e){cat("ERROR :",conditionMessage(e), "\n", "No DEGs for cluster", i-1, "?", "\n")})
