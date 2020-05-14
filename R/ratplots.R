@@ -307,6 +307,29 @@ DEGs_UpDown_Plot <- function(Cluster_DEG_list, padj = .05, color.up = "#FFB81C",
   return(p1)
 }
 
+DEG_similarity_plot <- function(Cluster_DEG_list_x, Cluster_DEG_list_y, cluster_name, logFCcollapse = 10){
+  data_1 <- Cluster_DEG_list_x[[cluster_name]] %>%
+    select(gene, avg_logFC, p_val_adj)
+  data_2 <- Cluster_DEG_list_y[[cluster_name]] %>%
+    select(gene, avg_logFC, p_val_adj)
+  data_use <- full_join(data_1, data_2, by = "gene")
+  data_use$avg_logFC.x[data_use$avg_logFC.x < -logFCcollapse] <- -logFCcollapse
+  data_use$avg_logFC.x[data_use$avg_logFC.x > logFCcollapse] <- logFCcollapse
+  data_use$avg_logFC.y[data_use$avg_logFC.y < -logFCcollapse] <- -logFCcollapse
+  data_use$avg_logFC.y[data_use$avg_logFC.y > logFCcollapse] <- logFCcollapse
+  data_use$nacolor <- "Yes"
+  data_use[complete.cases(data_use),]$nacolor <- "No"
+  data_use[is.na(data_use)] <- 0
+  crho <- cor.test(x = data_use$avg_logFC.x, y = data_use$avg_logFC.y, method = "spearman")
+  ggplot(data = data_use, aes(x = avg_logFC.x, y = avg_logFC.y, color = nacolor)) +
+    geom_point(alpha = .1) +
+    theme_classic() +
+    xlim(-logFCcollapse,logFCcollapse) +
+    ylim(-logFCcollapse,logFCcollapse) +
+    ggtitle(paste0("Spearman Rho ", signif(crho$estimate, 3))) +
+    labs(color = "NAs present?") +
+    scale_color_manual(values = c("Black", "Red"))
+}
 
 #this needs to be fixed because apparently you cant have two calls to geom_text. could probably rbind label.data 1 and 2, then color by defining column
 Volcano_Plot_GS_notworks <- function(degfile, label_features.1, label_features.2 = NULL, gene_column = "geneid", logfc_column = "log2fc",
