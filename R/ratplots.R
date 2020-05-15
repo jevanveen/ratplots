@@ -103,18 +103,18 @@ BellagioGeneSet <- function(Cluster_DEG_list, logFCcollapse = 10, features, clus
     collapse$avg_logFC[collapse$avg_logFC < -logFCcollapse] <- -logFCcollapse
     collapse$avg_logFC[collapse$avg_logFC > logFCcollapse] <- logFCcollapse
     if(!is.null(clusters)){
-      collapse <- filter(collapse, Cluster %in% clusters)
+      collapse <- filter(collapse, cluster %in% clusters)
     }
-    collapse$Cluster <- as.factor(collapse$Cluster)
+    collapse$cluster <- as.factor(collapse$cluster)
     ncolor <- length(unique(collapse$gene[collapse$gene %in% capitalize(tolower(features))]))
     mycolors <- colorRampPalette(brewer.pal(8, "Spectral"))(ncolor)
     data.sub <- subset(collapse, gene %in% features)
     p1 <- ggplot() +
-      geom_point(data = collapse, aes(x = Cluster, y = avg_logFC), position = "jitter", color = "gray") +
-      geom_point(data = data.sub, aes(x = Cluster, y = avg_logFC, color = gene), position = position_jitter(seed = 1)) +
+      geom_point(data = collapse, aes(x = cluster, y = avg_logFC), position = "jitter", color = "gray") +
+      geom_point(data = data.sub, aes(x = cluster, y = avg_logFC, color = gene), position = position_jitter(seed = 1)) +
       scale_color_manual(values = mycolors) +
       theme_classic() +
-      geom_text(data = data.sub, size = label.size, alpha = label.alpha, aes(x = Cluster, y = avg_logFC, label = gene), position = position_jitter(seed = 1))
+      geom_text(data = data.sub, size = label.size, alpha = label.alpha, aes(x = cluster, y = avg_logFC, label = gene), position = position_jitter(seed = 1))
     return(p1)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
@@ -306,7 +306,7 @@ DEGs_UpDown_Plot <- function(Cluster_DEG_list, padj = .05, color.up = "#FFB81C",
 
   return(p1)
 }
-
+#
 DEG_similarity_plot <- function(Cluster_DEG_list_x, Cluster_DEG_list_y, cluster_name, logFCcollapse = 10){
   data_1 <- Cluster_DEG_list_x[[cluster_name]] %>%
     select(gene, avg_logFC, p_val_adj)
