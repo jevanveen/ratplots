@@ -24,7 +24,7 @@ top_markers <- function(marker.list, n_markers = 1, adj_p_cutoff = .05){
     tops <- tibble()
     for(i in 1:nclusters){
       temp <- filter(marker.list, cluster == i-1) %>%
-        arrange(desc(avg_logFC), desc(sig))
+        arrange(sig, desc(avg_logFC))
       tops <- bind_rows(tops, head(temp, n_markers))
     }
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
@@ -84,7 +84,8 @@ BellagioPlot <- function(Cluster_DEG_list, logFCcollapse = 10, padj.cutoff = .05
     collapse <- bind_rows(Cluster_DEG_list)
     collapse$avg_logFC[collapse$avg_logFC < -logFCcollapse] <- -logFCcollapse
     collapse$avg_logFC[collapse$avg_logFC > logFCcollapse] <- logFCcollapse
-    collapse$cluster <- as.factor(collapse$cluster)
+    levs <- collapse$cluster %>% unique()
+    collapse$cluster <- factor(collapse$cluster, levels = levs)
 
     p1 <- ggplot() +
       geom_point(data = subset(collapse, p_val_adj > padj.cutoff), size = pt.size, aes(x = cluster, y = avg_logFC, color = "> .05"), position = "jitter") +
@@ -96,25 +97,33 @@ BellagioPlot <- function(Cluster_DEG_list, logFCcollapse = 10, padj.cutoff = .05
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
 
-BellagioGeneSet <- function(Cluster_DEG_list, logFCcollapse = 10, features, clusters = NULL, label.size = 2.5, label.alpha = .6){
+BellagioGeneSet <- function(Cluster_DEG_list, logFCcollapse = 10, features,
+                            clusters = NULL, label.size = 2.5, label.alpha = .6,
+                            padj.cutoff = NULL, pt.size = 1, label.nudge = 1,
+                            gs.pt.size = 1, color.palette = "Spectral"){
   tryCatch({
-    features <- capitalize(tolower(features))
+    features <<- capitalize(tolower(features))
     collapse <- bind_rows(Cluster_DEG_list)
     collapse$avg_logFC[collapse$avg_logFC < -logFCcollapse] <- -logFCcollapse
     collapse$avg_logFC[collapse$avg_logFC > logFCcollapse] <- logFCcollapse
     if(!is.null(clusters)){
       collapse <- filter(collapse, cluster %in% clusters)
     }
-    collapse$cluster <- as.factor(collapse$cluster)
-    ncolor <- length(unique(collapse$gene[collapse$gene %in% capitalize(tolower(features))]))
-    mycolors <- colorRampPalette(brewer.pal(8, "Spectral"))(ncolor)
-    data.sub <- subset(collapse, gene %in% features)
+    levs <- collapse$cluster %>% unique()
+    collapse$cluster <- factor(collapse$cluster, levels = levs)
+    #ncolor <- length(unique(collapse$gene[collapse$gene %in% features]))
+    data.sub <- filter(collapse, gene %in% features)
+    if(!is.null(padj.cutoff)){
+      data.sub <- filter(data.sub, p_val_adj <= padj.cutoff)
+    }
+    ncolor <- length(unique(data.sub$gene))
+    mycolors <- grDevices::colorRampPalette(brewer.pal(8, color.palette))(ncolor)
     p1 <- ggplot() +
-      geom_point(data = collapse, aes(x = cluster, y = avg_logFC), position = "jitter", color = "gray") +
-      geom_point(data = data.sub, aes(x = cluster, y = avg_logFC, color = gene), position = position_jitter(seed = 1)) +
+      geom_point(size = pt.size, data = collapse, aes(x = cluster, y = avg_logFC), position = "jitter", color = "gray") +
+      geom_point(size = gs.pt.size, data = data.sub, aes(x = cluster, y = avg_logFC, color = gene), position = position_jitter(height = 0)) +
       scale_color_manual(values = mycolors) +
       theme_classic() +
-      geom_text(data = data.sub, size = label.size, alpha = label.alpha, aes(x = cluster, y = avg_logFC, label = gene), position = position_jitter(seed = 1))
+      geom_text(data = data.sub, size = label.size, alpha = label.alpha, aes(x = cluster, y = avg_logFC, label = gene), position = position_nudge(y = label.nudge))
     return(p1)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
@@ -274,7 +283,7 @@ Cluster_sig_DEGs <- function(Cluster_DEG_list, padj = .05){
   return(temp)
 
 }
-DEGs_UpDown_Plot <- function(Cluster_DEG_list, padj = .05, color.up = "#FFB81C", color.down = "#2774AE"){
+DEGs_UpDown_Plot <- function(Cluster_DEG_list, padj = .05, color.up = "#FFB81C", color.down = "#2774AE", return_table = F){
   num.clusters <- length(Cluster_DEG_list)
   temp.sig <- list()
   for(i in 1:num.clusters){
@@ -303,8 +312,8 @@ DEGs_UpDown_Plot <- function(Cluster_DEG_list, padj = .05, color.up = "#FFB81C",
     geom_hline(yintercept = 0, color = "darkgrey", linetype = "dashed") +
     labs(y = "Up/Down regulated, adjp < .05", x = NULL, fill = NULL) +
     theme_classic()
-
-  return(p1)
+  if(return_table == F){
+  return(p1)} else {return(updown)}
 }
 #
 DEG_similarity_plot <- function(Cluster_DEG_list_x, Cluster_DEG_list_y, cluster_name, logFCcollapse = 10){
@@ -329,6 +338,23 @@ DEG_similarity_plot <- function(Cluster_DEG_list_x, Cluster_DEG_list_y, cluster_
     ggtitle(paste0("Spearman Rho ", signif(crho$estimate, 3))) +
     labs(color = "NAs present?") +
     scale_color_manual(values = c("Black", "Red"))
+}
+
+DEG_similarity_table <- function(Cluster_DEG_list_x, Cluster_DEG_list_y){
+  clusters <- intersect(names(Cluster_DEG_list_x), names(Cluster_DEG_list_y))
+  ret <- tibble()
+  for(i in clusters){
+  data_1 <- Cluster_DEG_list_x[[i]] %>%
+    select(gene, avg_logFC)
+  data_2 <- Cluster_DEG_list_y[[i]] %>%
+    select(gene, avg_logFC)
+  data_use <- full_join(data_1, data_2, by = "gene")
+  data_use[is.na(data_use)] <- 0
+  crho <- cor.test(x = data_use$avg_logFC.x, y = data_use$avg_logFC.y, method = "spearman")
+  temp <- tibble(i, crho$estimate)
+  ret <- bind_rows(ret, temp)
+  }
+  return(ret)
 }
 
 #this needs to be fixed because apparently you cant have two calls to geom_text. could probably rbind label.data 1 and 2, then color by defining column
