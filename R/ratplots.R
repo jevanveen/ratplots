@@ -91,7 +91,8 @@ BellagioPlot <- function(Cluster_DEG_list, logFCcollapse = 10, padj.cutoff = .05
       geom_point(data = subset(collapse, p_val_adj > padj.cutoff), size = pt.size, aes(x = cluster, y = avg_logFC, color = "> .05"), position = "jitter") +
       geom_point(data = subset(collapse, p_val_adj <= padj.cutoff), size = pt.size, aes(x = cluster, y = avg_logFC, color = "<= .05"), position = "jitter") +
       scale_color_manual(name = "adjusted p val", values = c("black", "grey")) +
-      theme_classic()
+      theme_classic() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))
 
     return(p1)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
@@ -123,7 +124,8 @@ BellagioGeneSet <- function(Cluster_DEG_list, logFCcollapse = 10, features,
       geom_point(size = gs.pt.size, data = data.sub, aes(x = cluster, y = avg_logFC, color = gene), position = position_jitter(height = 0)) +
       scale_color_manual(values = mycolors) +
       theme_classic() +
-      geom_text(data = data.sub, size = label.size, alpha = label.alpha, aes(x = cluster, y = avg_logFC, label = gene), position = position_nudge(y = label.nudge))
+      geom_text(data = data.sub, size = label.size, alpha = label.alpha, aes(x = cluster, y = avg_logFC, label = gene), position = position_nudge(y = label.nudge)) +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))
     return(p1)
   }, error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
 }
@@ -169,12 +171,14 @@ GSEA_Mountain <- function(Cluster_DEG_list, cluster, geneset, gseaParam = 1, tic
 
 
 
-Volcano_Plot_GS <- function(degfile, label_features, gene_column = "geneid", logfc_column = "log2fc",
-                            pvalue_column = "pvalue", padj_column = "padj",
+Volcano_Plot_GS <- function(degfile, label_features, gene_column = "gene", logfc_column = "avg_logFC",
+                            pvalue_column = "p_val", padj_column = "p_val_adj",
                             label_padj = .05, point_alpha = 1, base_color = "gray", sig_color = "black",
-                            gs_color = "purple", gs_size = 2){
+                            gs_color = "purple", gs_size = 2, logFCcollapse = 30){
   tryCatch({
-    label_features <- label_features %>% tolower() %>% Hmisc::capitalize()
+    degfile$avg_logFC[degfile$avg_logFC < -logFCcollapse] <- -logFCcollapse
+    degfile$avg_logFC[degfile$avg_logFC > logFCcollapse] <- logFCcollapse
+    #label_features <- label_features %>% tolower() %>% Hmisc::capitalize()
     missing.features <- label_features[!(label_features %in% degfile[[gene_column]])]
     label.data <- filter(degfile, degfile[[gene_column]] %in% label_features)
     sig.data <- filter(degfile, degfile[[padj_column]] < label_padj)
