@@ -3,6 +3,8 @@ library(tidyverse)
 library(Seurat)
 #library(fgsea)
 library(cowplot)
+library(ratplots)
+
 
 #import male LHA data. n = 3 males, but pooled by authors into one sample run
 
@@ -119,17 +121,16 @@ table(lha.neurons.sub@meta.data$orig.ident)
 neuron.markers <- FindAllMarkers(lha.neurons.sub, only.pos = T)
 
 make.unique(top_markers(neuron.markers)$gene)
-
-lha.neurons.sub.2 <- rename_clusters(lha.neurons.sub, marker.list = neuron.markers)
+top_markers(neuron.markers)
+lha.neurons.sub <- rename_clusters(lha.neurons.sub, marker.list = neuron.markers)
 
 DimPlot(lha.neurons.sub, reduction = "umap", label = TRUE) + NoLegend()
 
-lha.neurons.sub@meta.data[orig.ident]
-levels(lha.neurons.sub@active.ident)
-
 lha.neurons.fvm <- cluster_DEGs(lha.neurons.sub, condition_1 = "femaleLHA", condition_2 = "maleLHA")
 
-levels(lha.neurons@active.ident)
+lha.neurons.fvm$Slc17a6
+
+levels(lha.neurons.sub@active.ident)
 
 
 
