@@ -1,9 +1,13 @@
 #Need
 #check all existing functions
-#fix indexing by number DONE
 #standardize names between functions
 
 
+capitalize <- function(x) {
+  s <- strsplit(x, " ")[[1]]
+  paste(toupper(substring(s, 1,1)), substring(s, 2),
+        sep="", collapse=" ")
+}
 
 save_ploty <- function(filename, plot, font = "Arial", font_size = 10, line_width = .5,
                        ncol = 1, nrow = 1, base_height = 3.71, base_asp = 1.618, base_width = NULL,
@@ -174,7 +178,7 @@ Cluster_GSEA <- function(Cluster_DEG_list, geneset, sig.snapshot = F,
     for(i in 1:nclusters){
       tryCatch({
         print(paste0("Calculating GSEA for cluster ", i))
-        rnkfile <<- data.frame(cbind(Cluster_DEG_list[[i]]$gene, Cluster_DEG_list[[i]]$avg_logFC), stringsAsFactors = F)
+        rnkfile <- data.frame(cbind(Cluster_DEG_list[[i]]$gene, Cluster_DEG_list[[i]]$avg_logFC), stringsAsFactors = F)
         colnames(rnkfile) <- c("ID", "t")
         rnkfile$t <- as.numeric(rnkfile$t)
         rnkfile <- rnkfile[complete.cases(rnkfile),]
@@ -222,7 +226,7 @@ Volcano_Plot_GS <- function(degfile, label_features, gene_column = "gene", logfc
     if(!is.null(pval_collapse)){
     degfile$p_val[degfile$p_val < pval_collapse] <- pval_collapse
     }
-    label_features <- label_features %>% tolower() %>% Hmisc::capitalize()
+    label_features <- label_features %>% tolower() %>% capitalize()
     missing.features <- label_features[!(label_features %in% degfile[[gene_column]])]
     label.data <- filter(degfile, degfile[[gene_column]] %in% label_features)
     sig.data <- filter(degfile, abs(degfile[[logfc_column]]) > label_log2fc & degfile[[padj_column]] < label_padj)
